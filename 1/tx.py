@@ -1,35 +1,27 @@
 import ggwave
 import pyaudio
 
-# Инициализируем движок ggwave
 instance = ggwave.init()
 
-# Настройки аудио (должны совпадать с отправителем)
 p = pyaudio.PyAudio()
-stream = p.open(format=pyaudio.paInt16, channels=1, rate=48000, input=True, frames_per_buffer=1024)
+# ВАЖНО: формат паFloat32 и буфер побольше (4096), чтобы не терять пакеты
+stream = p.open(format=pyaudio.paFloat32, channels=1, rate=48000, input=True, frames_per_buffer=4096)
 
-print("Приниматель запущен. Слушаю эфир... (Нажмите Ctrl+C для выхода)")
+print("Слушаю эфир (Float32)...")
 
 try:
     while True:
-        # Читаем данные с микрофона
-        data = stream.read(1024, exception_on_overflow=False)
+        data = stream.read(4096, exception_on_overflow=False)
         
-        # Передаем аудио-пакет в декодер ggwave
+        # Декодируем float32 данные
         res = ggwave.decode(instance, data)
         
-        # Если ggwave успешно распознал маркеры и текст
-        if res:
-            try:
-                decoded_text = res.decode("utf-8")
-                print(f"\n[Успешно получено]: {decoded_text}")
-            except Exception as e:
-                print(f"\n Ошибка декодирования строки: {e}")
-                
+        if res is not None:
+            print(f"\n[Получено]: {res.decode('utf-8')}")
 except KeyboardInterrupt:
-    print("\nОстановка принимателя...")
+    pass
 finally:
-    # Очистка ресурсов
+    ggwave.free(instance)
     stream.stop_stream()
     stream.close()
     p.terminate()
