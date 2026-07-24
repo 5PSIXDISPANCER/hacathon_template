@@ -1,72 +1,100 @@
-import numpy as np
-import sounddevice as sd
+import wave
 import struct
-from reedsolo import RSCodec, ReedSolomonError
-import binascii
+import math
+from io import BytesIO
 
-SAMPLE_RATE = 44100
-BAUD_RATE = 50
-FREQ_0 = 2000.0
-FREQ_1 = 4000.0
-SAMPLES_PER_BIT = int(SAMPLE_RATE / BAUD_RATE)
-RS = RSCodec(10)
+def decode_multichannel_fsk(
+    wav_bytes: bytes,
+    fs: int = 44100,
+    sym_dur: float = 0.05,
+    K: int = 4,
+    f_base: float = 500,
+    channel_spacing: float = 400,
+    tone_step: float = 25
+) -> bytes:
+    """
+    Декодер многоканальной 16-FSK.
+    Параметры должны совпадать с модулятором.
+    Возвращает исходные байты (без учёта возможного дополнения нулями в конце).
+    """
+    # === Чтение WAV ===
+    with wave.open(BytesIO(wav_bytes), 'rb') as wf:
+        assert wf.getsampwidth() == 2, "Ожидается 16-битный PCM"
+        assert wf.getnchannels() == 1, "Ожидается моно"
+        frame_rate = wf.getframerate()
+        # Можно разрешить небольшое расхождение частоты дискретизации
+        if frame_rate != fs:
+            print(f"Предупреждение: Fs в WAV ({frame_rate}) != ожидаемой ({fs}). Используется {frame_rate}")
+            fs = frame_rate
 
-def record_audio(duration):
-    print(f"Слушаю эфир {duration} секунд...")
-    recording = sd.rec(int(duration * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype='float32')
-    sd.wait()
-    return recording.flatten()
+        raw_data = wf.readframes(wf.getnframes())
+        # Распаковываем 16-битные знаковые целые
+        fmt = f"{len(raw_data)//2}h"
+        samples_int = struct.unpack(fmt, raw_data)
+        # Нормализация к диапазону [-1, 1]
+        samples = [s / 32768.0 for s in samples_int]
 
-def demodulate(audio_signal):
-    print("Демодуляция сигнала...")
-    bits = []
-    
-    # Упрощенная логика: скользим окном по аудио и смотрим, какая частота доминирует
-    # (В реальном проекте здесь нужен детектор преамбулы для точной синхронизации)
-    
-    for i in range(0, len(audio_signal) - SAMPLES_PER_BIT, SAMPLES_PER_BIT):
-        chunk = audio_signal[i:i+SAMPLES_PER_BIT]
-        # Применяем FFT для нахождения пиковых частот
-        fft_result = np.fft.rfft(chunk)
-        fft_freqs = np.fft.rfftfreq(len(chunk), 1/SAMPLE_RATE)
-        
-        peak_freq = fft_freqs[np.argmax(np.abs(fft_result))]
-        
-        # Определение бита с допуском +- 200 Гц
-        if abs(peak_freq - FREQ_1) < 200:
-            bits.append(1)
-        elif abs(peak_freq - FREQ_0) < 200:
-            bits.append(0)
-            
-    return bits
+    # === Параметры символа ===
+    N = int(fs * sym_dur)                     # отсчётов на символ
+    num_symbols = len(samples) // N           # полных символов
 
-def decode_and_save(bits, output_filename="received.txt"):
-    # Перевод бит в байты
-    byte_array = np.packbits(bits)
-    
-    try:
-        # Извлечение заголовка (8 байт: 4 байта длина, 4 байта CRC)
-        payload_len, expected_crc = struct.unpack('>II', byte_array[:8])
-        encoded_data = byte_array[8:8+payload_len]
-        
-        # Коррекция ошибок
-        decoded_data = RS.decode(encoded_data)[0]
-        
-        # Проверка целостности
-        actual_crc = binascii.crc32(decoded_data) & 0xffffffff
-        if actual_crc == expected_crc:
-            with open(output_filename, 'wb') as f:
-                f.write(decoded_data)
-            print(f"Успех! Файл сохранен как {output_filename}. Целостность подтверждена.")
-        else:
-            print("Ошибка: CRC не совпадает. Файл поврежден.")
-            
-    except ReedSolomonError:
-        print("Ошибка: Слишком много шума, FEC не смог восстановить данные.")
-    except Exception as e:
-        print(f"Ошибка парсинга данных: {e}")
+    # === Таблица частот (как в модуляторе) ===
+    freqs = []
+    for k in range(K):
+        base_k = f_base + k * channel_spacing
+        freqs.append([base_k + s * tone_step for s in range(16)])
 
-# Пример запуска (нужно указать примерное время передачи)
-# audio = record_audio(15)
-# bits = demodulate(audio)
-# decode_and_save(bits)
+    # === Предвычисление sin/cos таблиц для всех каналов, тонов и отсчётов ===
+    # Это значительно ускоряет вычисление корреляций
+    cos_tables = [[[0.0]*N for _ in range(16)] for _ in range(K)]
+    sin_tables = [[[0.0]*N for _ in range(16)] for _ in range(K)]
+
+    for k in range(K):
+        for s in range(16):
+            f = freqs[k][s]
+            for n in range(N):
+                phase = 2 * math.pi * f * n / fs
+                cos_tables[k][s][n] = math.cos(phase)
+                sin_tables[k][s][n] = math.sin(phase)
+
+    # === Декодирование ===
+    decoded_nibbles = []
+    for sym_idx in range(num_symbols):
+        start = sym_idx * N
+        block = samples[start:start+N]
+
+        # Декодируем каждый канал
+        for k in range(K):
+            max_energy = -1.0
+            best_nibble = 0
+            for s in range(16):
+                # Корреляция с cos и sin на частоте f_s
+                I = 0.0
+                Q = 0.0
+                cos_arr = cos_tables[k][s]
+                sin_arr = sin_tables[k][s]
+                for n in range(N):
+                    val = block[n]
+                    I += val * cos_arr[n]
+                    Q += val * sin_arr[n]
+                energy = I*I + Q*Q
+                if energy > max_energy:
+                    max_energy = energy
+                    best_nibble = s
+            decoded_nibbles.append(best_nibble)
+
+    # === Сборка байтов ===
+    # Игнорируем последний нечётный полубайт (если есть)
+    byte_list = []
+    for i in range(0, len(decoded_nibbles) - 1, 2):
+        high = decoded_nibbles[i]
+        low = decoded_nibbles[i+1]
+        byte_list.append((high << 4) | low)
+
+    return bytes(byte_list)
+
+with open('res.wav', 'rb') as f:
+    wav_data = f.read()
+original_bytes = decode_multichannel_fsk(wav_data)
+with open('decoded_output.bin', 'wb') as f:
+    f.write(original_bytes)
