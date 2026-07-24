@@ -238,7 +238,6 @@ class App(ctk.CTk):
             f"ЧАСТОТА КАНАЛА: {self.selected_freq.get()} Гц\n"
             f"РАЗМЕР ФРЕЙМА: {self.selected_frame.get()}"
         )
-        self.settings()
         lbl_info = ctk.CTkLabel(
             self.main_container, 
             text=info_text, 
