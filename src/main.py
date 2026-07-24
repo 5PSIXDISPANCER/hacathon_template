@@ -1,13 +1,15 @@
-import customtkinter as CTk
 
-def button_callback():
-    print("button pressed")
+from gui.ui import App 
 
-app = CTk.CTk()
-app.title("my app")
-app.geometry("500x500")
 
-button = CTk.CTkButton(app, text="my button", command=button_callback)
-button.grid(row=0, column=0, padx=20, pady=20)
+class Main(App):
+    def __init__(self):
+        super().__init__()
 
-app.mainloop()
+    def get_config(self):
+            
+
+
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()

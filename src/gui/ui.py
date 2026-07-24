@@ -219,7 +219,8 @@ class App(ctk.CTk):
 
     # ================= 3. Меню прогресса =================
     def show_progress_menu(self):
-        
+
+
         self.clear_container()
 
         title = ctk.CTkLabel(
@@ -237,6 +238,7 @@ class App(ctk.CTk):
             f"ЧАСТОТА КАНАЛА: {self.selected_freq.get()} Гц\n"
             f"РАЗМЕР ФРЕЙМА: {self.selected_frame.get()}"
         )
+        self.settings()
         lbl_info = ctk.CTkLabel(
             self.main_container, 
             text=info_text, 
@@ -269,7 +271,7 @@ class App(ctk.CTk):
             command=self.show_main_menu
         )
         btn_back.pack(pady=20)
-        return self.selected_format.get(), self.selected_freq.get(), self.selected_frame.get()
+        
 
     # ================= 4. Меню приёма =================
     def show_receive_menu(self):
@@ -321,6 +323,11 @@ class App(ctk.CTk):
             command=self.show_main_menu
         )
         btn_back.pack(pady=20)
+
+    def settings(self):
+        return self.file_name, self.selected_format.get().upper(), self.selected_freq.get(), self.selected_frame.get()
+
+
 
 
 if __name__ == "__main__":
