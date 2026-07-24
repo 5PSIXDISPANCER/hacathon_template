@@ -1,98 +1,88 @@
-import os
 import struct
 import math
-import wave
 
-# --- Настройки акустического канала ---
-SAMPLE_RATE = 44100  # Стандартная частота дискретизации аудио
-BAUD_RATE = 50       # Скорость передачи: 50 бит в секунду
-FREQ_0 = 2000.0      # Частота (Гц), обозначающая бит '0'
-FREQ_1 = 4000.0      # Частота (Гц), обозначающая бит '1'
-
-BIT_DURATION = 1.0 / BAUD_RATE
-SAMPLES_PER_BIT = int(SAMPLE_RATE * BIT_DURATION)
-
-def encode_file_to_bits(filepath):
+def make_multichannel_fsk_wav(
+    data: bytes,
+    num_carriers: int = 4,      # K
+    fs: int = 44100,
+    sym_dur: float = 0.05,      # длительность символа
+    f_base: float = 500,        # нижняя частота первого канала
+    channel_spacing: float = 400,  # расстояние между центрами каналов
+    tone_step: float = 25,      # шаг между частотами внутри канала (16 тонов)
+    amplitude: float = 0.9
+) -> bytes:
     """
-    Читает любой файл, собирает пакет (Заголовок + Данные) 
-    и превращает его в плоский список нулей и единиц.
+    Многоканальная 16‑FSK / упрощённый OFDM.
+    Каждый поднесущий модулируется своим полубайтом.
     """
-    print(f"📦 Подготовка файла: '{filepath}'")
-    
-    # 1. Читаем бинарные данные файла
-    with open(filepath, 'rb') as f:
-        file_data = f.read()
-        
-    file_size = len(file_data)
-    # Получаем имя файла и переводим в байты (UTF-8)
-    filename_bytes = os.path.basename(filepath).encode('utf-8')
-    
-    # 2. Формируем структуру протокола (Служебная информация + Данные)
-    # Используем встроенный модуль struct для упаковки чисел в байты
-    sync_marker = b'SYNC'                                   # 4 байта: Маркер начала
-    name_length = struct.pack('B', len(filename_bytes))     # 1 байт: Длина имени
-    size_bytes = struct.pack('>I', file_size)               # 4 байта: Размер файла
-    
-    # Склеиваем всё в один пакет
-    packet = sync_marker + name_length + filename_bytes + size_bytes + file_data
-    
-    print(f"📊 Размер исходного файла: {file_size} байт")
-    print(f"📈 Общий размер пакета с заголовком: {len(packet)} байт")
-    
-    # 3. Разбиваем байты на биты (от старшего к младшему)
-    bits = []
-    for byte in packet:
-        for i in range(7, -1, -1):
-            bits.append((byte >> i) & 1)
-            
-    print(f"✅ Сгенерировано {len(bits)} бит.")
-    return bits
+    K = num_carriers
+    # Построим таблицу частот для каждого канала: channel[k][nibble] = частота
+    freqs = []
+    for k in range(K):
+        base_k = f_base + k * channel_spacing
+        freqs.append([base_k + s * tone_step for s in range(16)])
 
-def generate_wav_from_bits(bits, output_wav="transmit.wav"):
-    """
-    Берет массив битов и синтезирует из них звуковую волну (синусоиду).
-    Сохраняет результат в стандартный .wav файл без использования внешних библиотек.
-    """
-    print(f"🎵 Генерация аудиофайла '{output_wav}'...")
-    
-    # Открываем WAV файл для записи 
-    # (1 канал - моно, 2 байта - 16-bit звук, 44100 Гц)
-    with wave.open(output_wav, 'w') as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(SAMPLE_RATE)
-        
-        # Для каждого бита генерируем звук нужной частоты
-        for bit in bits:
-            freq = FREQ_1 if bit == 1 else FREQ_0
-            
-            # Генерируем сэмплы (точки звуковой волны) для одного бита
-            for i in range(SAMPLES_PER_BIT):
-                # Формула синусоиды: A * sin(2 * pi * f * t)
-                time = i / SAMPLE_RATE
-                # 32767 - максимальная амплитуда для 16-битного звука
-                sample_value = int(32767 * math.sin(2 * math.pi * freq * time))
-                
-                # Упаковываем число в 2 байта (формат 'h' - signed 16-bit, Little-Endian)
-                packed_sample = struct.pack('<h', sample_value)
-                wav_file.writeframesraw(packed_sample)
-                
-    # Рассчитываем примерное время звучания
-    duration = len(bits) / BAUD_RATE
-    print(f"🚀 Готово! Аудиофайл успешно сохранен.")
-    print(f"⏱ Время звучания файла: {duration:.1f} секунд.")
+    n_samples = int(fs * sym_dur)
+    # Амплитуда одной поднесущей (чтобы суммарный пик < 32767)
+    max_amplitude = int(32767 * amplitude)
+    sub_amplitude = max_amplitude // K   # простое деление
 
-# ==========================================
-# ПРИМЕР ИСПОЛЬЗОВАНИЯ
-# ==========================================
-if __name__ == "__main__":
-    # 1. Создадим тестовый текстовый файл для передачи (если его нет)
-    test_file = "hru.txt"
-    with open(test_file, "wb") as f:
-        f.write(b"Hello, Acoustic World!")
-            
-    # 2. Конвертируем файл в биты
-    bits_to_transmit = encode_file_to_bits(test_file)
-    
-    # 3. Генерируем .wav файл
-    generate_wav_from_bits(bits_to_transmit, "modem_sound.wav")
+    # Преобразуем данные в поток полубайтов
+    nibbles = []
+    for byte in data:
+        nibbles.append(byte >> 4)        # старший
+        nibbles.append(byte & 0x0F)      # младший
+
+    # Дополним до кратности K
+    rem = len(nibbles) % K
+    if rem != 0:
+        nibbles.extend([0] * (K - rem))
+
+    samples = []
+    # Фазы для каждого канала (поддерживаются непрерывными между блоками)
+    phases = [0.0] * K
+
+    # Обрабатываем блоки по K полубайтов
+    for block_start in range(0, len(nibbles), K):
+        block = nibbles[block_start:block_start + K]
+        # Для каждого отсчёта в символе
+        for i in range(n_samples):
+            value = 0.0
+            for k in range(K):
+                f = freqs[k][block[k]]
+                # синусоида с текущей фазой
+                value += math.sin(phases[k])
+                # обновляем фазу
+                phases[k] += 2 * math.pi * f / fs
+                # нормируем фазу (необязательно, но полезно)
+                if phases[k] > 2 * math.pi:
+                    phases[k] -= 2 * math.pi
+            # масштабируем и записываем
+            sample = int(value * sub_amplitude)
+            # клиппинг на всякий случай
+            if sample > 32767:
+                sample = 32767
+            elif sample < -32768:
+                sample = -32768
+            samples.append(sample)
+
+    # Упаковка в PCM 16-bit little-endian
+    pcm_data = b''.join(struct.pack('<h', s) for s in samples)
+
+    # Заголовок WAV
+    data_size = len(pcm_data)
+    header = struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF', 36 + data_size, b'WAVE',
+        b'fmt ', 16, 1, 1, fs, fs * 2, 2, 16,
+        b'data', data_size
+    )
+    return header + pcm_data
+
+# Пример использования
+with open('acoustic_modem\hru.txt', 'rb') as f:
+    file_bytes = f.read()
+
+wav_bytes = make_multichannel_fsk_wav(file_bytes, num_carriers=4)
+with open('res.wav', 'wb') as f:
+    f.write(wav_bytes)
