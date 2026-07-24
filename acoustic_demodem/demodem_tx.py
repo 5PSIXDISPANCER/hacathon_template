@@ -2,6 +2,27 @@ import wave
 import struct
 import math
 from io import BytesIO
+import sounddevice as sd
+import numpy as np
+import wave
+
+duration = 5  # секунд
+fs = 44100
+sd.default.samplerate = fs
+sd.default.channels = 1
+sd.default.dtype = 'int16'
+
+print("Запись...")
+audio = sd.rec(int(duration * fs), blocking=True)
+print("Готово!")
+
+# audio — это numpy array int16
+# Сохраняем в WAV
+with wave.open('recorded.wav', 'wb') as wf:
+    wf.setnchannels(1)
+    wf.setsampwidth(2)
+    wf.setframerate(fs)
+    wf.writeframes(audio.tobytes())
 
 def decode_multichannel_fsk(
     wav_bytes: bytes,
@@ -93,7 +114,7 @@ def decode_multichannel_fsk(
 
     return bytes(byte_list)
 
-with open('res.wav', 'rb') as f:
+with open('recorded.wav', 'rb') as f:
     wav_data = f.read()
 original_bytes = decode_multichannel_fsk(wav_data)
 with open('decoded_output.bin', 'wb') as f:
