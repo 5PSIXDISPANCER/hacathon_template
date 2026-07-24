@@ -31,45 +31,40 @@ def decode_multichannel_fsk(
     K: int = 4,
     f_base: float = 500,
     channel_spacing: float = 400,
-    tone_step: float = 25
+    tone_step: float = 25,
+    preamble: bytes = b'\xDE\xAD\xBE\xEF',
+    postamble: bytes = b'\xCA\xFE\xBA\xBE'
 ) -> bytes:
     """
-    Декодер многоканальной 16-FSK.
-    Параметры должны совпадать с модулятором.
-    Возвращает исходные байты (без учёта возможного дополнения нулями в конце).
+    Декодер многоканальной 16-FSK с флагами.
+    Возвращает полезные данные между preamble и postamble.
+    Если флаги не найдены, возвращает пустую строку.
     """
-    # === Чтение WAV ===
+    # --- Чтение WAV ---
     with wave.open(BytesIO(wav_bytes), 'rb') as wf:
-        assert wf.getsampwidth() == 2, "Ожидается 16-битный PCM"
-        assert wf.getnchannels() == 1, "Ожидается моно"
-        frame_rate = wf.getframerate()
-        # Можно разрешить небольшое расхождение частоты дискретизации
-        if frame_rate != fs:
-            print(f"Предупреждение: Fs в WAV ({frame_rate}) != ожидаемой ({fs}). Используется {frame_rate}")
-            fs = frame_rate
-
-        raw_data = wf.readframes(wf.getnframes())
-        # Распаковываем 16-битные знаковые целые
-        fmt = f"{len(raw_data)//2}h"
-        samples_int = struct.unpack(fmt, raw_data)
-        # Нормализация к диапазону [-1, 1]
+        assert wf.getsampwidth() == 2, "16-bit PCM expected"
+        assert wf.getnchannels() == 1, "Mono expected"
+        file_fs = wf.getframerate()
+        if file_fs != fs:
+            print(f"Warning: WAV sample rate {file_fs} != expected {fs}, using {file_fs}")
+            fs = file_fs
+        raw = wf.readframes(wf.getnframes())
+        fmt = f"{len(raw)//2}h"
+        samples_int = struct.unpack(fmt, raw)
         samples = [s / 32768.0 for s in samples_int]
 
-    # === Параметры символа ===
-    N = int(fs * sym_dur)                     # отсчётов на символ
-    num_symbols = len(samples) // N           # полных символов
+    N = int(fs * sym_dur)
+    num_symbols = len(samples) // N
 
-    # === Таблица частот (как в модуляторе) ===
+    # --- Частотные таблицы ---
     freqs = []
     for k in range(K):
         base_k = f_base + k * channel_spacing
         freqs.append([base_k + s * tone_step for s in range(16)])
 
-    # === Предвычисление sin/cos таблиц для всех каналов, тонов и отсчётов ===
-    # Это значительно ускоряет вычисление корреляций
+    # --- Предвычисление корреляционных таблиц ---
     cos_tables = [[[0.0]*N for _ in range(16)] for _ in range(K)]
     sin_tables = [[[0.0]*N for _ in range(16)] for _ in range(K)]
-
     for k in range(K):
         for s in range(16):
             f = freqs[k][s]
@@ -78,20 +73,16 @@ def decode_multichannel_fsk(
                 cos_tables[k][s][n] = math.cos(phase)
                 sin_tables[k][s][n] = math.sin(phase)
 
-    # === Декодирование ===
+    # --- Демодуляция всех символов в полубайты ---
     decoded_nibbles = []
     for sym_idx in range(num_symbols):
         start = sym_idx * N
         block = samples[start:start+N]
-
-        # Декодируем каждый канал
         for k in range(K):
             max_energy = -1.0
             best_nibble = 0
             for s in range(16):
-                # Корреляция с cos и sin на частоте f_s
-                I = 0.0
-                Q = 0.0
+                I = Q = 0.0
                 cos_arr = cos_tables[k][s]
                 sin_arr = sin_tables[k][s]
                 for n in range(N):
@@ -104,15 +95,25 @@ def decode_multichannel_fsk(
                     best_nibble = s
             decoded_nibbles.append(best_nibble)
 
-    # === Сборка байтов ===
-    # Игнорируем последний нечётный полубайт (если есть)
-    byte_list = []
+    # --- Сборка байтов из полубайтов ---
+    all_bytes = bytearray()
     for i in range(0, len(decoded_nibbles) - 1, 2):
         high = decoded_nibbles[i]
         low = decoded_nibbles[i+1]
-        byte_list.append((high << 4) | low)
+        all_bytes.append((high << 4) | low)
 
-    return bytes(byte_list)
+    # --- Поиск флагов ---
+    start_idx = all_bytes.find(preamble)
+    if start_idx == -1:
+        return b''          # преамбула не найдена
+
+    start_idx += len(preamble)
+    end_idx = all_bytes.find(postamble, start_idx)
+    if end_idx == -1:
+        # если конец не найден, берём всё до конца
+        return bytes(all_bytes[start_idx:])
+
+    return bytes(all_bytes[start_idx:end_idx])
 
 with open('recorded.wav', 'rb') as f:
     wav_data = f.read()
