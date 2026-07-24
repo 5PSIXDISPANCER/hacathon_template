@@ -324,8 +324,6 @@ class App(ctk.CTk):
         )
         btn_back.pack(pady=20)
 
-    def settings(self):
-        return self.file_name, self.selected_format.get().upper(), self.selected_freq.get(), self.selected_frame.get()
 
 
 
