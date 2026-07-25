@@ -1,6 +1,7 @@
 CONFIG = {
-    'File': r'C:/Users/PC/Documents/Arduino/libraries/LoRa/examples/LoRaDuplexCallback/LoRaDuplexCallback.ino',
+    'File': 'res.wav',
+    'Path': r'C:/Users/PC/Downloads/res.wav',
     'Format': 'BIN',
-    'Freq': 48000,
-    'Frame': 4096
+    'Freq': 44100,
+    'Frame': 1024
 }

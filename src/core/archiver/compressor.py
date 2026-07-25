@@ -20,7 +20,8 @@ class Compressor():
         # Автоматическое имя архива
         if not output_archive_path:
                     current_dir = os.path.dirname(os.path.abspath(__file__))
-                    target_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "data"))
+                    target_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "data", "Compressor"))
+                    print(target_dir)
                     os.makedirs(target_dir, exist_ok=True)
                     pure_filename = os.path.basename(source_path)
                     output_archive_path = os.path.join(target_dir, f"{pure_filename}.7z")
@@ -64,7 +65,7 @@ class Compressor():
 
         except Exception as e:
             print(f"\n Ошибка при сжатии: {e}")
-        return pure_filename
+            
 
     def decompress(self, archive_path: str, output_dir: str =None):
         """

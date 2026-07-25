@@ -230,13 +230,16 @@ class App(ctk.CTk):
         self.clear_container()
 
         config = {
-            "File": self.file_path.get(), 
+            "File": self.file_path.get().split('/')[-1],
+            "Path": self.file_path.get(), 
             "Format": self.selected_format.get().upper(),
             "Freq": self.selected_freq.get(), 
             "Frame": self.selected_frame.get()
         }
 
         self.send_config(config)
+
+
 
 
 
@@ -344,13 +347,11 @@ class App(ctk.CTk):
         btn_back.pack(pady=20)
 
     def send_config(self, config):
-        print("КЛИК СРАБОТАЛ!")
         import main
-        print(config)
         thread = threading.Thread(
-        
-        target=main.Main.get_config, args=(config,),daemon=True)
+        target=main.Main.send, args=(config,),daemon=True)
         thread.start()
+       
 
 
 
