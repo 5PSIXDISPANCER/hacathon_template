@@ -1,7 +1,7 @@
 CONFIG = {
-    'File': '17_6024',
-    'Path': r'C:/Users/PC/Downloads/17_6024.txt',
-    'Format': 'txt',
-    'Freq': 44100,
+    'File': 'start',
+    'Path': r'C:/Users/Guest/Desktop/start.bat',
+    'Format': 'jpg',
+    'Freq': 48000,
     'Frame': 1024
 }
