@@ -64,6 +64,7 @@ class Compressor():
 
         except Exception as e:
             print(f"\n Ошибка при сжатии: {e}")
+        return pure_filename
 
     def decompress(self, archive_path: str, output_dir: str =None):
         """

@@ -1,5 +1,5 @@
 CONFIG = {
-    'File': r'../../Documents/Obsidian Vault/Основной/Подготовка к ЕГЭ/Профильная Математика/Вторая часть/Банк ФИПИ/Номер 5FCD16.pdf',
+    'File': r'C:/Users/PC/Documents/Arduino/libraries/LoRa/examples/LoRaDuplexCallback/LoRaDuplexCallback.ino',
     'Format': 'BIN',
     'Freq': 44100,
     'Frame': 1024

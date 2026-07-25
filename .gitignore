@@ -40,3 +40,5 @@ artifacts/demo/*.mov
 artifacts/demo/*.mkv
 artifacts/demo/*.wav
 
+src/data
+

@@ -21,3 +21,4 @@ def Stream(waveform: bytes,rate: int,frames_per_buffer: int, audio_format: int =
     stream.stop_stream()
     stream.close()
     p.terminate()
+    print(1)

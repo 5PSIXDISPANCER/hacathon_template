@@ -208,7 +208,8 @@ class App(ctk.CTk):
             self.project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
             rel_path = os.path.relpath(filename, start=self.project_root)
             rel_path = rel_path.replace("\\", "/")
-            self.file_path.set(rel_path)
+            
+            self.file_path.set(filename)
             short_name = filename if len(filename) < 35 else "..." + filename[-32:]
             self.lbl_file_path.configure(text=short_name, text_color=DOTA_GOLD)
         
@@ -343,6 +344,7 @@ class App(ctk.CTk):
         btn_back.pack(pady=20)
 
     def send_config(self, config):
+        print("КЛИК СРАБОТАЛ!")
         import main
         print(config)
         thread = threading.Thread(
