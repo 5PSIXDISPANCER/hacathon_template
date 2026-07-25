@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import filedialog
-
+import threading
+from src.core.audio.receiver import Stream
 # Принудительно ставим темную тему, как в клиенте Dota 2
 ctk.set_appearance_mode("Dark")
 
@@ -223,6 +224,15 @@ class App(ctk.CTk):
 
         self.clear_container()
 
+        thread = threading.Thread(
+            target=Stream(
+                format=self.selected_format.get().upper(),
+                rate=self.selected_freq.get(),
+                frames=self.selected_frame.get()
+                ),
+            daemon=True)
+        thread.start()
+
         title = ctk.CTkLabel(
             self.main_container, 
             text="ОТПРАВКА ФАЙЛА...", 
@@ -238,7 +248,6 @@ class App(ctk.CTk):
             f"ЧАСТОТА КАНАЛА: {self.selected_freq.get()} Гц\n"
             f"РАЗМЕР ФРЕЙМА: {self.selected_frame.get()}"
         )
-        self.settings()
         lbl_info = ctk.CTkLabel(
             self.main_container, 
             text=info_text, 
@@ -324,8 +333,6 @@ class App(ctk.CTk):
         )
         btn_back.pack(pady=20)
 
-    def settings(self):
-        return self.file_name, self.selected_format.get().upper(), self.selected_freq.get(), self.selected_frame.get()
 
 
 

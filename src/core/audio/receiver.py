@@ -3,10 +3,10 @@ from gui.ui import App
 # from ggwave import ...
 p = pyaudio.PyAudio()
 
+def Stream(format: int, rate: int,frames: int ):
+    stream = p.open(format=format, channels=1 , rate = rate, output=True, frames_per_buffer=frames)
+    stream.write(waveform, len(waveform)//4)
+    stream.stop_stream()
+    stream.close()
 
-stream = p.open(format=App().show_progress_menu[0], channels=1 , rate = App().show_progress_menu[1], output=True, frames_per_buffer=App().show_progress_menu[2])
-stream.write(waveform, len(waveform)//4)
-stream.stop_stream()
-stream.close()
-
-p.terminate()
+    p.terminate()

@@ -1,85 +1,112 @@
-import zstandard as zstd
-import sys
 import os
-
-def compress_file(input_path: str, level: int = 3):
-
-    
-    # Настройка сжатия
-    compressor = zstd.ZstdCompressor(level=level)
-    
-    # Читаем исходный файл
-    with open(input_path, 'rb') as f:
-        data = f.read()
-    
-    # Сжимаем
-    compressed = compressor.compress(data)
-    
-    # Сохраняем
-    with open(r"src\data\send.txt", 'wb') as f:
-        f.write(compressed)
-    
-    # Статистика
-    original_size = os.path.getsize(input_path)
-    compressed_size = len(compressed)
-    ratio = (1 - compressed_size / original_size) * 100
-    
-    print(f"✅ Файл сжат:")
-    print(f"   Исходный: {original_size:,} байт")
-    print(f"   Сжатый:  {compressed_size:,} байт")
-    print(f"   Экономия: {ratio:.1f}%")
-    print(f"   Сохранён: {output_path}")
-    
-    return output_path
+import time
+import py7zr
 
 
-def decompress_file(input_path: str, output_path: str = None):
-    """
-    Распаковать файл .zst
-    
-    Args:
-        input_path: путь к сжатому файлу
-        output_path: путь к распакованному файлу (если None, убирает .zst)
-    """
-    if output_path is None:
-        if input_path.endswith('.zst'):
-            output_path = input_path[:-4]
+class Compressor():
+    def __init__(self):
+        pass
+
+    def compress(self,source_path: str, output_archive_path: str = None):
+        """
+        Максимальное сжатие для файлов и папок размером до 10 МБ.
+        Файлы меньше 10 кб - BZIP2
+        Остальные - LZMA2
+        """
+        if not os.path.exists(source_path):
+            print(f"Ошибка: Путь '{source_path}' не существует.")
+            return
+
+        # Автоматическое имя архива
+        if not output_archive_path:
+            base_name = os.path.basename(os.path.normpath(source_path))
+            output_archive_path = f"{base_name}_max.7z"
+
+        # Конфигурация экстремального сжатия для малых объемов данных
+        orig_size = self.get_size(source_path)
+        if orig_size == 0:
+            filters = None
+        elif orig_size < 10240:  # Если файл меньше 10 КБ (как ваш PROTOCOL.md)
+            # Для микро-файлов BZIP2 в py7zr сжимает эффективнее и никогда не ломает заголовки
+            filters = [{'id': py7zr.FILTER_BZIP2}]
         else:
-            output_path = input_path + '.decompressed'
-    
-    # Настройка распаковки
-    decompressor = zstd.ZstdDecompressor()
-    
-    # Читаем сжатый файл
-    with open(input_path, 'rb') as f:
-        compressed = f.read()
-    
-    # Распаковываем
-    decompressed = decompressor.decompress(compressed)
-    
-    # Сохраняем
-    with open(output_path, 'wb') as f:
-        f.write(decompressed)
-    
-    print(f"✅ Файл распакован: {output_path}")
-    return output_path
+            filters = [
+                {
+                    'id': py7zr.FILTER_LZMA2,
+                    'dict': 16 * 1024 * 1024,     # 16 МБ словаря полностью перекрывают ваши 10 МБ файла
+                    'fb': 273,                    # Максимальное количество проверяемых байт (Fast Byte)
+                    'lc': 3,                      # Литеральные контекстные биты (стандарт для ультра)
+                    'lp': 0,
+                    'pb': 2
+                }
+            ]
 
+        start_time = time.time()
+
+        try:
+            # Включаем solid-режим (непрерывный архив) для максимальной склейки мелких файлов
+            with py7zr.SevenZipFile(output_archive_path, 'w', filters=filters) as archive:
+                if os.path.isfile(source_path):
+                    archive.write(source_path, os.path.basename(source_path))
+                elif os.path.isdir(source_path):
+                    archive.writeall(source_path, os.path.basename(os.path.normpath(source_path)))
+            
+            elapsed_time = time.time() - start_time
+            orig_size = self.get_size(source_path)
+            arch_size = os.path.getsize(output_archive_path)
+            ratio = (arch_size / orig_size) * 100 if orig_size > 0 else 0
+
+        except Exception as e:
+            print(f"\n Ошибка при сжатии: {e}")
+
+    def decompress(self, archive_path: str, output_dir: str =None):
+        """
+        Разархивирует файлы в отдельную папку
+        """
+        if not os.path.exists(archive_path):
+            print(f"Ошибка: Архив '{archive_path}' не найден.")
+            return
+
+        if not os.path.isfile(archive_path):
+            print(f"Ошибка: Путь '{archive_path}' не является файлом.")
+            return
+
+        # Если папка для распаковки не указаны, создаем ее рядом с архивом
+        if not output_dir:
+            # Убираем расширение .7z для имени папки
+            base_name = os.path.splitext(os.path.basename(archive_path))[0]
+            parent_dir = os.path.dirname(os.path.abspath(archive_path))
+            output_dir = os.path.join(parent_dir, f"{base_name}_extracted")
+
+        start_time = time.time()
+
+        try:
+            # Режим 'r' (read) автоматически считывает все LZMA2 фильтры из заголовка
+            with py7zr.SevenZipFile(archive_path, mode='r') as archive:
+                archive.extractall(path=output_dir)
+
+        except Exception as e:
+            print(f"\nОшибка при декомпрессии: {e}")
+
+    def get_size(self,path: str):
+        """
+        Выдает размер файла
+        """
+        if os.path.isfile(path):
+            return os.path.getsize(path)
+        total_size = 0
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if os.path.exists(fp):
+                    total_size += os.path.getsize(fp)
+        return total_size
+    
+    
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Использование:")
-        print("  Сжатие:   python script.py compress <файл> [уровень]")
-        print("  Распаковка: python script.py decompress <файл.zst>")
-        sys.exit(1)
-    
-    command = sys.argv[1]
-    
-    if command == "compress" and len(sys.argv) >= 3:
-        level = int(sys.argv[3]) if len(sys.argv) > 3 else 3
-        compress_file(sys.argv[2], level=level)
-    
-    elif command == "decompress" and len(sys.argv) >= 3:
-        decompress_file(sys.argv[2])
-    
-    else:
-        print("Неверная команда")
+    comressor = Compressor()
+    do = comressor.get_size("docs\PROTOCOL.md")
+    comressor.compress("docs\PROTOCOL.md")
+    posle = comressor.get_size("PROTOCOL.md_max.7z")
+    print(f"До {do}, после {posle}")
