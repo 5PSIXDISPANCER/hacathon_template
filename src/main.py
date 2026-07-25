@@ -1,5 +1,5 @@
 
-from gui.ui import App 
+from core.gui.ui import App 
 
 
 class Main(App):

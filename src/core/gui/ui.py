@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from tkinter import filedialog
 import threading
-from src.core.audio.receiver import Stream
+from ..audio.receiver import Stream
 # Принудительно ставим темную тему, как в клиенте Dota 2
 ctk.set_appearance_mode("Dark")
 
@@ -226,9 +226,8 @@ class App(ctk.CTk):
 
         thread = threading.Thread(
             target=Stream(
-                format=self.selected_format.get().upper(),
-                rate=self.selected_freq.get(),
-                frames=self.selected_frame.get()
+                rate=int(self.selected_freq.get()),
+                frames=int(self.selected_frame.get())
                 ),
             daemon=True)
         thread.start()

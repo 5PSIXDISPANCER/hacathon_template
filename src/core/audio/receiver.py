@@ -1,9 +1,8 @@
 import pyaudio
-from gui.ui import App
 # from ggwave import ...
 p = pyaudio.PyAudio()
 
-def Stream(format: int, rate: int,frames: int ):
+def Stream(rate: int,frames: int, format: int = pyaudio.paInt16):
     stream = p.open(format=format, channels=1 , rate = rate, output=True, frames_per_buffer=frames)
     stream.write(waveform, len(waveform)//4)
     stream.stop_stream()
