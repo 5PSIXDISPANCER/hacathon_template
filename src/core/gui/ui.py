@@ -205,8 +205,7 @@ class App(ctk.CTk):
 
     def select_file(self):
         """Открытие системного проводника"""
-        fmt = self.selected_format.get()
-        filetypes = [(f"Файлы (*.{fmt})", f"*.{fmt}"), ("Все файлы", "*.*")]
+        filetypes = [("Все файлы", "*.*")]
 
         filename = filedialog.askopenfilename(
             title="Выберите файл",
