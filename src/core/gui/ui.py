@@ -1,7 +1,6 @@
 import customtkinter as ctk
 from tkinter import filedialog
 import threading
-from ..audio.receiver import Stream
 import os
 # Принудительно ставим темную тему, как в клиенте Dota 2
 ctk.set_appearance_mode("Dark")
@@ -303,6 +302,7 @@ class App(ctk.CTk):
     
     # ================= 4. Меню приёма =================
     def show_receive_menu(self):
+        self.stop_flag.clear()
         self.clear_container()
         
         # Переменная для отслеживания статуса записи

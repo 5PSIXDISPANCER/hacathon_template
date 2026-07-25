@@ -60,7 +60,7 @@ class Main(App):
         if flag.is_set():
             return
         md = Modem()
-        file_size = md.encode_large_file(fr"src\data\Compressor\{dt["File"]}.7z",fr"src\data\Wave\send\{dt["File"]}.wav")
+        file_size = md.encode_large_file(dt["Path"],fr"src\data\Wave\send\{dt["File"]}.wav")
         wav_path = fr"src\data\Wave\send\{dt["File"]}.wav"
         if file_size > 0:
             _, tx_signal = wavfile.read(wav_path)
@@ -129,7 +129,7 @@ class Main(App):
             
             # ДЕКОДИРОВАНИЕ
             md = Modem()
-            output_archive_path = r"src\data\res\received_archive.7z"
+            output_archive_path = r"src\data\res\received_archive.txt"
             
             # Передаем полный массив int16 напрямую в модем
             md.decode_large_file_from_samples(
