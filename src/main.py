@@ -13,7 +13,9 @@ class Main(App):
     def send():
         search_pattern = os.path.join(r"src\data", "*.txt")
         found_files = glob.glob(search_pattern)
-        Stream(waveform=found_files[0], rate = config.CONFIG['Freq'], frames_per_buffer=config.CONFIG["Frame"])
+        with open(found_files[0], "rb") as f:
+            file_bytes = f.read()
+        Stream(waveform=file_bytes, rate = config.CONFIG['Freq'], frames_per_buffer=config.CONFIG["Frame"])
         
 
     @staticmethod

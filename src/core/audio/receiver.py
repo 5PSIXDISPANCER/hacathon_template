@@ -15,7 +15,7 @@ def Stream(waveform: bytes,rate: int,frames_per_buffer: int, audio_format: int =
         frames_per_buffer=frames_per_buffer
     )
     bytes_per_frame = p.get_sample_size(audio_format)
-    num_frames = len(waveform) // bytes_per_frame
+    num_frames = len(waveform) // 4
 
     stream.write(waveform, num_frames)
     stream.stop_stream()
