@@ -351,7 +351,10 @@ class App(ctk.CTk):
         thread = threading.Thread(
         target=main.Main.send, args=(config,),daemon=True)
         thread.start()
-       
+    def start_accept(self):
+        import main
+        thread = threading.Thread(target=main.Main.accept(), args=None, daemon=True)
+        thread.start()
 
 
 

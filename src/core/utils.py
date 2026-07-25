@@ -27,3 +27,8 @@ def bytes_file(path):
        b = open(fr"{path}","rb").read()
        return b
 
+def write_bytes(date):
+       config_path = r"src\data\Transmitter\end.txt"
+       with open(config_path, "a", encoding="utf-8") as f:
+              f.write(date)
+              

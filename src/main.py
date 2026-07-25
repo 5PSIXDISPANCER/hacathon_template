@@ -1,11 +1,10 @@
 
 from core.gui.ui import App 
 from core.archiver.compressor import Compressor
-import os
-import glob
 from core.audio.receiver import Stream
 from core.ggwave import converter
 from core import utils
+from core.audio.transmitter import listen
 class Main(App):
     def __init__(self):
         super().__init__()
@@ -37,9 +36,9 @@ class Main(App):
     #         comperss_intil.compress(source_path=config.CONFIG['File'])
     #         Main.use_ggwave()
 
-    def get_config(config):
+    # def get_config(config):
       
-        Main.operated_config()
+    #     Main.operated_config()
 
     def send(dt):
         utils.write_config(config=dt)
@@ -49,6 +48,9 @@ class Main(App):
         wave = converter.encoded(bytes)
         Stream(waveform=wave, rate=int(dt["Freq"]), frames_per_buffer=int(dt["Frame"]))
 
+    def accept(self):
+        date = listen()
+        utils.write_bytes(date=date)
         
 
     
