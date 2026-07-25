@@ -2,7 +2,9 @@ import pyaudio
 # from ggwave import ...
 
 def Stream(waveform: bytes,rate: int,frames_per_buffer: int, audio_format: int = pyaudio.paInt16):
-
+    """
+    Принимаем поток байтов waveform и транслируем
+    """
     p = pyaudio.PyAudio()
 
     stream = p.open(
