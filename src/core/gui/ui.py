@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import filedialog
 import threading
 from ..audio.receiver import Stream
+import os
 # Принудительно ставим темную тему, как в клиенте Dota 2
 ctk.set_appearance_mode("Dark")
 
@@ -26,7 +27,7 @@ class App(ctk.CTk):
         self.configure(fg_color=DOTA_BG)
 
         # Переменные для хранения выбранных настроек
-        self.selected_format = ctk.StringVar(value="jpg")
+        self.selected_format = ctk.StringVar(value="bin")
         self.selected_freq = ctk.StringVar(value="44100")
         self.selected_frame = ctk.StringVar(value="1024")
         self.file_path = ctk.StringVar(value="")
@@ -203,7 +204,11 @@ class App(ctk.CTk):
         )
         
         if filename:
-            self.file_path.set(filename)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            self.project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+            rel_path = os.path.relpath(filename, start=self.project_root)
+            rel_path = rel_path.replace("\\", "/")
+            self.file_path.set(rel_path)
             short_name = filename if len(filename) < 35 else "..." + filename[-32:]
             self.lbl_file_path.configure(text=short_name, text_color=DOTA_GOLD)
         
@@ -221,16 +226,21 @@ class App(ctk.CTk):
     # ================= 3. Меню прогресса =================
     def show_progress_menu(self):
 
-
         self.clear_container()
 
-        thread = threading.Thread(
-            target=Stream(
-                rate=int(self.selected_freq.get()),
-                frames=int(self.selected_frame.get())
-                ),
-            daemon=True)
-        thread.start()
+        config = {
+            "File": self.file_path.get(), 
+            "Format": self.selected_format.get().upper(),
+            "Freq": self.selected_freq.get(), 
+            "Frame": self.selected_frame.get()
+        }
+
+        self.send_config(config)
+
+
+
+
+        
 
         title = ctk.CTkLabel(
             self.main_container, 
@@ -242,10 +252,10 @@ class App(ctk.CTk):
 
         file_name = self.file_path.get().split('/')[-1]
         info_text = (
-            f"ЦЕЛЬ: {file_name}\n"
-            f"ТИП ДАННЫХ: {self.selected_format.get().upper()}\n"
-            f"ЧАСТОТА КАНАЛА: {self.selected_freq.get()} Гц\n"
-            f"РАЗМЕР ФРЕЙМА: {self.selected_frame.get()}"
+            f"ЦЕЛЬ: {self.file_path.get().split('/')[-1]}\n"
+            f"ТИП ДАННЫХ: {config['Format']}\n"
+            f"ЧАСТОТА КАНАЛА: {config['Freq']} Гц\n"
+            f"РАЗМЕР ФРЕЙМА: {config['Frame']}"
         )
         lbl_info = ctk.CTkLabel(
             self.main_container, 
@@ -331,6 +341,15 @@ class App(ctk.CTk):
             command=self.show_main_menu
         )
         btn_back.pack(pady=20)
+
+    def send_config(self, config):
+        import main
+        print(config)
+        thread = threading.Thread(
+        
+        target=main.Main.get_config, args=(config,),daemon=True)
+        thread.start()
+
 
 
 

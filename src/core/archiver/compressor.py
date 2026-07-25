@@ -7,7 +7,7 @@ class Compressor():
     def __init__(self):
         pass
 
-    def compress(self,source_path: str, output_archive_path: str = None):
+    def compress(self,source_path: str, output_archive_path  = None ):
         """
         Максимальное сжатие для файлов и папок размером до 10 МБ.
         Файлы меньше 10 кб - BZIP2
@@ -19,8 +19,14 @@ class Compressor():
 
         # Автоматическое имя архива
         if not output_archive_path:
-            base_name = os.path.basename(os.path.normpath(source_path))
-            output_archive_path = f"{base_name}_max.7z"
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    target_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "data"))
+                    os.makedirs(target_dir, exist_ok=True)
+                    pure_filename = os.path.basename(source_path)
+                    output_archive_path = os.path.join(target_dir, f"{pure_filename}.7z")
+        # if not output_archive_path:
+        #     base_name = os.path.basename(os.path.normpath(source_path))
+        #     output_archive_path = f"{base_name}_max.7z"
 
         # Конфигурация экстремального сжатия для малых объемов данных
         orig_size = self.get_size(source_path)
