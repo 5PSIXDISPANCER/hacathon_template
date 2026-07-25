@@ -1,150 +1,120 @@
-import queue
-from core.gui.ui import App 
-from core.archiver.compressor import Compressor
-from core import utils
-from core.audio.modem import Modem
-import scipy.signal
-from scipy.io import wavfile
-import reedsolo
-import sounddevice as sd
-import time
-import numpy as np
 import os
+import threading
 
-FS = 44100
+from core.gui.ui import App
+from core.archiver.compressor import Compressor
+from core.audio.receiver import Stream
+from core.ggwave import converter
+from core import utils
+from core.audio.transmitter import listen
+
 
 class Main(App):
     def __init__(self):
         super().__init__()
-    # @staticmethod
-    # def send():
-    #     search_pattern = os.path.join(r"src\data", "*.txt")
-    #     found_files = glob.glob(search_pattern)
-    #     with open(found_files[0], "rb") as f:
-    #         file_bytes = f.read()
-    #     Stream(waveform=file_bytes, rate = config.CONFIG['Freq'], frames_per_buffer=config.CONFIG["Frame"])
-        
 
-    # @staticmethod
-    # def use_ggwave():
-        
-        
-    #     search_pattern = os.path.join(r"src\data", "*.7z")
-    #     found_files = glob.glob(search_pattern)
-    #     with open(r"src\data\ggwavefile.txt", "wb") as f:
-    #         f.write(converter.rad(found_files[0]))
-    #     Main.send()
+    # ============ Хуки UI: запускают реальную логику в фоновых потоках ============
+    # (чтобы Stream()/listen(), которые блокируют выполнение на время всей
+    # передачи, не морозили окно tkinter)
 
-        
+    def start_transfer(self):
+        dt = {
+            "File": os.path.splitext(os.path.basename(self.file_path.get()))[0],
+            "Path": self.file_path.get(),
+            "Freq": self.selected_freq.get(),
+            "Frame": self.selected_frame.get(),
+        }
+        threading.Thread(target=self._send_worker, args=(dt,), daemon=True).start()
 
-         
-    # @staticmethod
-    # def operated_config():
-    #         comperss_intil = Compressor()
-    #         comperss_intil.compress(source_path=config.CONFIG['File'])
-    #         Main.use_ggwave()
+    def _send_worker(self, dt):
+        try:
+            Main.send(dt)
+            self.after(0, self._on_transfer_done, True, None)
+        except Exception as e:
+            self.after(0, self._on_transfer_done, False, str(e))
 
-    # def get_config(config):
-      
-    #     Main.operated_config()
-
-    def send(dt,flag):
-        if flag.is_set():
+    def _on_transfer_done(self, success, error):
+        # Виджеты могли уже быть уничтожены, если пользователь ушёл с экрана
+        if not hasattr(self, "lbl_transfer_status") or not self.lbl_transfer_status.winfo_exists():
             return
-        utils.write_config(config=dt)
-        compressor_instance = Compressor() 
-        compressor_instance.compress(source_path=dt["Path"])
-        if flag.is_set():
-            return
-        md = Modem()
-        # fr"src\data\Compressor\{dt["File"]}.7z"
-        file_size = md.encode_large_file(dt["Path"],fr"src\data\Wave\send\{dt["File"]}.wav")
-        wav_path = fr"src\data\Wave\send\{dt["File"]}.wav"
-        if file_size > 0:
-            _, tx_signal = wavfile.read(wav_path)
-            
-            # ВАЖНО: Меняем blocking=True на blocking=False, иначе мы не сможем
-            # прервать воспроизведение звука, пока он полностью не доиграет!
-            sd.play(tx_signal, samplerate=FS, blocking=False)
-            
-            # Рассчитываем длительность аудио в секундах
-            duration = len(tx_signal) / FS
-            start_time = time.time()
-            
-            # Запускаем цикл ожидания окончания звука с постоянной проверкой флага
-            while time.time() - start_time < duration:
-                if flag.is_set():
-                    sd.stop() # Экстренно выключаем звук в динамиках/наушниках
-                    return
-                time.sleep(0.1) # Спим 100 мс, чтобы не нагружать процессор
-                
-            return
-
-    def accept(flag):
-        """
-        Фоновый прием аудио через sd.InputStream БЕЗ разрывов и ограничений по времени.
-        Данные поступают в callback и накопляются в очереди, пока не взведен flag.
-        """
-        print("Прием и запись сигнала запущены (без разрывов)...")
-        
-        fs = 44100
-        q = queue.Queue()
-
-        # Callback вызывают фоновые драйверы аудиокарты без паузы
-        def audio_callback(indata, frames, time_info, status):
-            if status:
-                print(f"[*] Статус аудиопотока: {status}")
-            q.put(indata.copy())
-
-        recorded_chunks = []
-
-        # 1. Открываем непрерывный поток записи в формате int16
-        with sd.InputStream(samplerate=fs, channels=1, dtype='int16', callback=audio_callback):
-            # Поток пишет сам в фоновом режиме, пока мы ждем установки флага
-            while not flag.is_set():
-                time.sleep(0.05)
-                # Вынимаем накопленные кусочки из очереди в наш список
-                while not q.empty():
-                    recorded_chunks.append(q.get())
-
-            # Выбираем остатки из очереди после нажатия кнопки "Назад"
-            while not q.empty():
-                recorded_chunks.append(q.get())
-
-        print("Прием остановлен пользователем. Обработка данных...")
-
-        if recorded_chunks:
-            # Склеиваем все куски в один монолитный массив
-            full_audio = np.concatenate(recorded_chunks, axis=0).flatten()
-            
-            # Сохраняем WAV фал
-            wav_dir = r"src\data\Wave\accept"
-            os.makedirs(wav_dir, exist_ok=True)
-            wav_path = os.path.join(wav_dir, "accepted.wav")
-            
-            wavfile.write(wav_path, fs, full_audio)
-            print(f"Полный сигнал собран: {len(full_audio)} сэмплов ({len(full_audio)/fs:.2f} сек).")
-            
-            # ДЕКОДИРОВАНИЕ
-            md = Modem()
-            output_archive_path = r"src\data\res\received_archive.txt"
-            
-            # Передаем полный массив int16 напрямую в модем
-            md.decode_large_file_from_samples(
-                samples=full_audio,
-                output_file_path=output_archive_path
-            )
-            print("Декодирование успешно завершено!")
+        self.progressbar.stop()
+        self.progressbar.set(1 if success else 0)
+        if success:
+            self.lbl_transfer_status.configure(text="Готово: файл передан", text_color="#2b8a3e")
         else:
-            print("Запись оказалась пустой.")
-        
+            self.lbl_transfer_status.configure(text=f"Ошибка передачи: {error}", text_color="#c0392b")
 
-    
+    def start_receiving(self):
+        threading.Thread(target=self._receive_worker, daemon=True).start()
+
+    def _receive_worker(self):
+        try:
+            result_dir = Main.accept()
+            self.after(0, self._on_receive_done, True, result_dir)
+        except Exception as e:
+            self.after(0, self._on_receive_done, False, str(e))
+
+    def _on_receive_done(self, success, info):
+        if not hasattr(self, "lbl_status") or not self.lbl_status.winfo_exists():
+            return
+        self.receive_progressbar.stop()
+        if success:
+            self.lbl_status.configure(
+                text=f"Файл принят и распакован:\n{info}",
+                text_color="#2b8a3e"
+            )
+        else:
+            self.lbl_status.configure(text=f"Ошибка приёма: {info}", text_color="#c0392b")
+
+    # ============ Собственно бизнес-логика ============
+
+    @staticmethod
+    def send(dt):
+        """
+        1. Сохраняет конфиг
+        2. Сжимает выбранный файл в .7z
+        3. Бьёт архив на чанки и кодирует каждый в ggwave-волну
+        4. Проигрывает чанки по очереди через колонки
+        """
+        utils.write_config(config=dt)
+
+        compressor_instance = Compressor()
+        archive_path = compressor_instance.compress(source_path=dt["Path"])
+        if not archive_path:
+            raise RuntimeError("Не удалось сжать файл")
+
+        archive_bytes = utils.bytes_file(archive_path)
+        waveforms = converter.encode_file(archive_bytes, protocol_id=1, volume=20)
+
+        Stream(waveforms, rate=int(dt["Freq"]), frames_per_buffer=int(dt["Frame"]))
+
+    @staticmethod
+    def accept():
+        """
+        1. Слушает микрофон и собирает чанки в единый .7z архив
+        2. Сохраняет архив на диск
+        3. Распаковывает его
+
+        Возвращает путь к папке с распакованными файлами.
+        Бросает исключение, если приём не удался.
+        """
+        archive_bytes = listen()
+        if archive_bytes is None:
+            raise RuntimeError("Не удалось принять ни одного чанка")
+
+        archive_path = utils.write_bytes(
+            data=archive_bytes,
+            path=r"src\data\Transmitter\received.7z"
+        )
+
+        compressor_instance = Compressor()
+        result_dir = compressor_instance.decompress(archive_path)
+        if not result_dir:
+            raise RuntimeError("Архив принят, но не удалось его распаковать (возможно, потеряны чанки)")
+
+        return result_dir
 
 
-
-        
 if __name__ == "__main__":
-    app = App()
+    app = Main()
     app.mainloop()
-                    

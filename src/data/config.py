@@ -1,7 +1,6 @@
 CONFIG = {
-    'File': '2kb.txt',
-    'Path': r'C:/Users/Guest/Desktop/2kb.txt',
-    'Format': 'BIN',
-    'Freq': 44100,
+    'File': 'Список модов',
+    'Path': r'C:/Users/Guest/Desktop/Список модов.txt',
+    'Freq': 48000,
     'Frame': 1024
 }
