@@ -70,7 +70,7 @@ hacathon_template/
 │   │   ├── gui/
 │   │   │   └── ui.py             # GUI на CustomTkinter
 │   │   ├── audio/
-│   │   │   ├── modem.py          # M-FSK модем для кодирования/декодирования
+│   │   │   ├
 │   │   │   ├── transmitter.py    # Передача аудио
 │   │   │   └── receiver.py       # Получение аудио
 │   │   ├── archiver/
