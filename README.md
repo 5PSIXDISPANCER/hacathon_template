@@ -70,7 +70,6 @@ hacathon_template/
 │   │   ├── gui/
 │   │   │   └── ui.py             # GUI на CustomTkinter
 │   │   ├── audio/
-│   │   │   ├
 │   │   │   ├── transmitter.py    # Передача аудио
 │   │   │   └── receiver.py       # Получение аудио
 │   │   ├── archiver/
