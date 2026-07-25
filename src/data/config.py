@@ -1,7 +1,7 @@
 CONFIG = {
-    'File': 'res.wav',
-    'Path': r'C:/Users/PC/Downloads/res.wav',
-    'Format': 'BIN',
+    'File': '17_6024',
+    'Path': r'C:/Users/PC/Downloads/17_6024.txt',
+    'Format': 'txt',
     'Freq': 44100,
     'Frame': 1024
 }
