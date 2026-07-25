@@ -304,6 +304,9 @@ class App(ctk.CTk):
     # ================= 4. Меню приёма =================
     def show_receive_menu(self):
         self.clear_container()
+        
+        # Переменная для отслеживания статуса записи
+        self.is_recording = False 
 
         title = ctk.CTkLabel(
             self.main_container, 
@@ -317,18 +320,18 @@ class App(ctk.CTk):
         status_card = ctk.CTkFrame(self.main_container, fg_color=DOTA_PANEL, corner_radius=8)
         status_card.pack(fill="x", padx=20, pady=20)
 
-        # Стилизация текста под внутриигровой войсчат
-        lbl_status = ctk.CTkLabel(
+        # Текст статуса (изначально в режиме ожидания)
+        self.lbl_status = ctk.CTkLabel(
             status_card, 
-            text="ИДЁТ ПРИЁМ ФАЙЛА...\nМИКРОФОН АКТИВЕН", 
+            text="ОЖИДАНИЕ...\nГОТОВ К ПРИЁМУ", 
             font=ctk.CTkFont(family="Arial", size=16, weight="bold"),
-            text_color=DOTA_RED,
+            text_color="#a0a5b5",
             wraplength=300
         )
-        lbl_status.pack(pady=(30, 15), padx=20)
+        self.lbl_status.pack(pady=(30, 15), padx=20)
 
-        # Индикатор (как каст способности)
-        progressbar = ctk.CTkProgressBar(
+        # Индикатор (сохраняем в self, чтобы управлять им из других методов)
+        self.receive_progressbar = ctk.CTkProgressBar(
             status_card, 
             width=250, 
             height=8,
@@ -337,9 +340,23 @@ class App(ctk.CTk):
             fg_color="#181a1f",
             corner_radius=0
         )
-        progressbar.pack(pady=(0, 30))
-        progressbar.start()
+        self.receive_progressbar.pack(pady=(0, 30))
+        self.receive_progressbar.set(0) # Обнуляем без запуска
 
+        # Кнопка Начать/Остановить запись
+        self.btn_toggle_record = ctk.CTkButton(
+            self.main_container, 
+            text="НАЧАТЬ ЗАПИСЬ", 
+            font=ctk.CTkFont(family="Arial", size=18, weight="bold"),
+            height=50,
+            corner_radius=4,
+            fg_color=DOTA_ACCEPT,
+            hover_color=DOTA_ACCEPT_HOVER,
+            command=self.toggle_recording
+        )
+        self.btn_toggle_record.pack(fill="x", padx=20, pady=10)
+
+        # Кнопка Назад
         btn_back = ctk.CTkButton(
             self.main_container, 
             text="ПОКИНУТЬ ЛОББИ (НАЗАД)",
@@ -348,9 +365,48 @@ class App(ctk.CTk):
             text_color="#767a85",
             hover_color=DOTA_PANEL,
             corner_radius=4,
-            command=self.show_main_menu
+            command=self.back_from_receive
         )
-        btn_back.pack(pady=20)
+        btn_back.pack(pady=10)
+
+    def toggle_recording(self):
+        """Переключает состояние записи (Старт/Стоп)"""
+        if not self.is_recording:
+            # Включаем запись
+            self.is_recording = True
+            
+            # Обновляем интерфейс (Красная тема во время записи)
+            self.lbl_status.configure(text="ИДЁТ ПРИЁМ ФАЙЛА...\nМИКРОФОН АКТИВЕН", text_color=DOTA_RED)
+            self.btn_toggle_record.configure(
+                text="ОСТАНОВИТЬ ЗАПИСЬ", 
+                fg_color=DOTA_RED, 
+                hover_color=DOTA_RED_HOVER
+            )
+            self.receive_progressbar.start()
+            
+            # Запускаем логику приема (убедитесь, что ошибки из прошлого ответа исправлены)
+            self.start_accept()
+        else:
+            # Выключаем запись
+            self.is_recording = False
+            self.stop_flag.set() # Посылаем сигнал остановки потоку
+            
+            # Обновляем интерфейс (Возврат к зеленой кнопке)
+            self.lbl_status.configure(text="ЗАПИСЬ ОСТАНОВЛЕНА\nОЖИДАНИЕ...", text_color="#a0a5b5")
+            self.btn_toggle_record.configure(
+                text="НАЧАТЬ ЗАПИСЬ", 
+                fg_color=DOTA_ACCEPT, 
+                hover_color=DOTA_ACCEPT_HOVER
+            )
+            self.receive_progressbar.stop()
+            self.receive_progressbar.set(0)
+
+    def back_from_receive(self):
+        """Безопасный выход из лобби с остановкой записи, если она идет"""
+        if self.is_recording:
+            self.stop_flag.set()
+            self.receive_progressbar.stop()
+        self.show_main_menu()
 
     def send_config(self, config):
         import main
@@ -359,7 +415,7 @@ class App(ctk.CTk):
         thread.start()
     def start_accept(self):
         import main
-        thread = threading.Thread(target=main.Main.accept(), args=None, daemon=True)
+        thread = threading.Thread(target=main.Main.accept, args=(self.stop_flag,), daemon=True)
         thread.start()
 
 

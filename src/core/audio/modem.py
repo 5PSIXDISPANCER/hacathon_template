@@ -4,6 +4,7 @@ from scipy.io import wavfile
 import reedsolo
 import sounddevice as sd
 import os
+import struct
 
 # --- НАСТРОЙКИ МОДЕМА ---
 FS = 44100
@@ -72,9 +73,9 @@ class Modem:
             signal = signal / max_val
         return signal
 
-    def encode_large_file(self,input_file_path: str, output_wav_path: str):
+    def encode_large_file(self, input_file_path: str, output_wav_path: str):
         """
-        Разбивает большой файл на пакеты и потоково пишет аудио в WAV.
+        Разбивает файл на пакеты, первым кадром передает размер файла, и пишет аудио в WAV.
         """
         if not os.path.exists(input_file_path):
             print(f"[-] Файл {input_file_path} не найден.")
@@ -86,7 +87,18 @@ class Modem:
         audio_accumulator = []
         audio_accumulator.append(np.zeros(int(FS * 1.0))) # Тишина в начале
         
-        frame_id = 0
+        # --- ОТПРАВКА МЕТАДАННЫХ (Frame ID 0) ---
+        # Упаковываем размер файла в 8 байт (little-endian unsigned long long)
+        size_bytes = struct.pack('<Q', file_size)
+        meta_chunk = size_bytes.ljust(PAYLOAD_PER_FRAME, b'\x00')
+        
+        meta_signal = self.generate_frame_signal(meta_chunk, frame_id=0)
+        audio_accumulator.append(meta_signal)
+        audio_accumulator.append(np.zeros(int(FS * 0.005)))
+        print("[+] Метаданные (размер файла) закодированы в кадр #0")
+
+        # --- ОТПРАВКА ДАННЫХ (Frame ID 1+) ---
+        frame_id = 1
         with open(input_file_path, 'rb') as f:
             while True:
                 chunk = f.read(PAYLOAD_PER_FRAME)
@@ -102,7 +114,7 @@ class Modem:
                 
                 frame_id += 1
                 if frame_id % 50 == 0:
-                    print(f"[+] Сгенерировано пакетов: {frame_id}...")
+                    print(f"[+] Сгенерировано пакетов данных: {frame_id}...")
 
         audio_accumulator.append(np.zeros(int(FS * 1.0))) # Тишина в конце
         
@@ -162,9 +174,9 @@ class Modem:
                 best_start = start
         return best_start
     
-    def decode_large_file_from_samples(self,samples: np.ndarray, output_file_path: str, total_file_size: int):
+    def decode_large_file_from_samples(self,samples: np.ndarray, output_file_path: str):
         """
-        Декодирует массив семплов (записанных с микрофона), исправляет ошибки и собирает файл.
+        Декодирует массив семплов (записанных с микрофона) до конца сигнала.
         """
         sig = samples.astype(np.float64) / 32768.0
 
@@ -184,18 +196,20 @@ class Modem:
         syms_per_packet = total_nibbles_per_packet // K
         pre_syms = int(np.ceil(len(pre_nib) / K))
 
-        expected_frames = int(np.ceil(total_file_size / PAYLOAD_PER_FRAME))
         reconstructed_data = bytearray()
+        extracted_file_size = None  # Сюда сохраним размер из метаданных
         
-        print(f"[*] Начинаем сборку файла ({expected_frames} пакетов)...")
+        print("[*] Начинаем прослушивание сигнала и сборку кадров...")
         
         current_search_start = 0
-        for frame_id in range(expected_frames):
+        frames_found = 0
+        
+        while True:
             sub_soft = soft[current_search_start:]
             rel_start = self.find_flag_soft(sub_soft, pre_nib, K)
             
             if rel_start == -1:
-                print(f"[-] Предупреждение: Не удалось найти кадр #{frame_id}")
+                print(f"[*] Сигнал завершен. Найдено кадров: {frames_found}")
                 break
                 
             start_sym = current_search_start + rel_start
@@ -215,22 +229,40 @@ class Modem:
 
             try:
                 decoded_packet, _, _ = rs.decode(bytes(raw_bytes[:packet_bytes_len]))
-                chunk_data = decoded_packet[2:] # отрезаем frame_id
-                reconstructed_data.extend(chunk_data)
+                # Читаем номер кадра из первых 2 байт
+                frame_id = int.from_bytes(decoded_packet[:2], byteorder='big')
+                chunk_data = decoded_packet[2:]
+                
+                if frame_id == 0:
+                    # Это кадр с метаданными
+                    extracted_file_size = struct.unpack('<Q', chunk_data[:8])[0]
+                    print(f"[+] Извлечены метаданные! Ожидаемый размер файла: {extracted_file_size} байт.")
+                else:
+                    # Это обычный кадр данных, добавляем в буфер
+                    reconstructed_data.extend(chunk_data)
+                    
             except Exception:
-                print(f"[-] Ошибка FEC в кадре #{frame_id} (пакет поврежден)")
+                print(f"[-] Ошибка FEC в найденном кадре. Заполняем нулями для сохранения синхронизации.")
                 reconstructed_data.extend(b'\x00' * PAYLOAD_PER_FRAME)
                 
             current_search_start = data_end
+            frames_found += 1
             
-            if (frame_id + 1) % 50 == 0:
-                print(f"[+] Обработано пакетов: {frame_id + 1}/{expected_frames}...")
+            if frames_found % 50 == 0:
+                print(f"[+] Обработано пакетов: {frames_found}...")
 
-        final_data = bytes(reconstructed_data[:total_file_size])
+        # Финальная обрезка файла
+        if extracted_file_size is not None:
+            final_data = bytes(reconstructed_data[:extracted_file_size])
+        else:
+            print("[-] Внимание: Кадр метаданных (0) утерян. Пытаемся удалить лишние нули с конца.")
+            while reconstructed_data and reconstructed_data[-1] == 0:
+                reconstructed_data.pop()
+            final_data = bytes(reconstructed_data)
+
         if os.path.dirname(output_file_path):
             os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
         
         with open(output_file_path, 'wb') as f:
             f.write(final_data)
-        print(f"[✓] Файл успешно восстановлен: {output_file_path}")
 
