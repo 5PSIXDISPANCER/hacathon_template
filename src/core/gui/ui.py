@@ -31,6 +31,8 @@ class App(ctk.CTk):
         self.selected_freq = ctk.StringVar(value="44100")
         self.selected_frame = ctk.StringVar(value="1024")
         self.file_path = ctk.StringVar(value="")
+        
+        self.stop_flag = threading.Event()
 
         # Главный контейнер для сцен
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
@@ -225,8 +227,13 @@ class App(ctk.CTk):
             self.btn_submit.configure(state="disabled", fg_color=DOTA_PANEL)
 
     # ================= 3. Меню прогресса =================
-    def show_progress_menu(self):
 
+    def back(self):
+            self.stop_flag.set()
+            self.show_main_menu()
+
+    def show_progress_menu(self):
+        self.stop_flag.clear()
         self.clear_container()
 
         config = {
@@ -290,11 +297,10 @@ class App(ctk.CTk):
             fg_color=DOTA_PANEL,
             hover_color="#343843",
             corner_radius=4,
-            command=self.show_main_menu
+            command=self.back
         )
         btn_back.pack(pady=20)
-        
-
+    
     # ================= 4. Меню приёма =================
     def show_receive_menu(self):
         self.clear_container()
@@ -349,7 +355,7 @@ class App(ctk.CTk):
     def send_config(self, config):
         import main
         thread = threading.Thread(
-        target=main.Main.send, args=(config,),daemon=True)
+        target=main.Main.send, args=(config,self.stop_flag,),daemon=True)
         thread.start()
     def start_accept(self):
         import main

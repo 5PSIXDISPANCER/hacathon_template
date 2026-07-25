@@ -1,6 +1,6 @@
 CONFIG = {
-    'File': 'res.wav',
-    'Path': r'C:/Users/PC/Downloads/res.wav',
+    'File': 'start.bat',
+    'Path': r'C:/Users/Guest/Desktop/start.bat',
     'Format': 'BIN',
     'Freq': 44100,
     'Frame': 1024
