@@ -21,7 +21,6 @@ class Main(App):
         dt = {
             "File": os.path.splitext(os.path.basename(self.file_path.get()))[0],
             "Path": self.file_path.get(),
-            "Format": self.selected_format.get(),
             "Freq": self.selected_freq.get(),
             "Frame": self.selected_frame.get(),
         }

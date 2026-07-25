@@ -243,7 +243,6 @@ class App(ctk.CTk):
         file_name = self.file_path.get().split('/')[-1]
         info_text = (
             f"ЦЕЛЬ: {file_name}\n"
-            f"ТИП ДАННЫХ: {self.selected_format.get().upper()}\n"
             f"ЧАСТОТА КАНАЛА: {self.selected_freq.get()} Гц\n"
             f"РАЗМЕР ФРЕЙМА: {self.selected_frame.get()}"
         )

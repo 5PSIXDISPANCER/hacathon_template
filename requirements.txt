@@ -1,10 +1,17 @@
 # Основные зависимости
-customtkinter==5.2.0          # GUI на базе tkinter
-scipy==1.11.0                 # Сигнальная обработка, фильтрация
-numpy==1.24.3                 # Численные вычисления, работа с массивами
-py7zr==0.20.8                 # Создание и работа с 7z архивами
-reedsolo==1.6.0               # Коды Рида-Соломона для коррекции ошибок
-sounddevice==0.4.6            # Запись/воспроизведение звука
-pyaudio==0.2.13               # Альтернативная библиотека для работы с аудио
-ggwave-wheels==0.4.2.5                # Кодирование данных в звук (альтернативный метод)
-
+backports.zstd  ==1.6.0
+brotli          ==1.2.0
+customtkinter   ==6.0.0
+darkdetect      ==0.8.0
+ggwave-wheels   ==0.4.2.5
+inflate64       ==1.0.4
+multivolumefile ==0.2.3
+packaging       ==26.2
+pip             ==26.1.2
+psutil          ==7.2.2
+py7zr           ==1.1.3
+PyAudio         ==0.2.14
+pybcj           ==1.0.8
+pycryptodomex   ==3.23.0
+pyppmd          ==1.3.1
+texttable       ==1.7.0

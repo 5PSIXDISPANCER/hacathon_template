@@ -13,7 +13,6 @@ def write_config(config):
             f.write("CONFIG = {\n")
             f.write(f"    'File': '{config['File']}',\n")
             f.write(f"    'Path': r'{config['Path']}',\n")
-            f.write(f"    'Format': '{config['Format']}',\n")
             f.write(f"    'Freq': {config['Freq']},\n")
             f.write(f"    'Frame': {config['Frame']}\n")
             f.write("}\n")
