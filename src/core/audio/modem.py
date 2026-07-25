@@ -110,7 +110,7 @@ class Modem:
                     
                 frame_signal = self.generate_frame_signal(chunk, frame_id)
                 audio_accumulator.append(frame_signal)
-                audio_accumulator.append(np.zeros(int(FS * 0.005))) # Пауза между кадрами
+                audio_accumulator.append(np.zeros(int(FS * 0.3))) # Пауза между кадрами
                 
                 frame_id += 1
                 if frame_id % 50 == 0:

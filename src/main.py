@@ -1,4 +1,4 @@
-
+import queue
 from core.gui.ui import App 
 from core.archiver.compressor import Compressor
 from core.audio.receiver import Stream
@@ -12,6 +12,7 @@ import reedsolo
 import sounddevice as sd
 import time
 import numpy as np
+import os
 
 FS = 44100
 
@@ -83,84 +84,61 @@ class Main(App):
 
     def accept(flag):
         """
-        Фоновый прием аудио через sd.rec БЕЗ ограничений по времени.
-        Запись идет циклическими блоками до тех пор, пока не взведен flag.
+        Фоновый прием аудио через sd.InputStream БЕЗ разрывов и ограничений по времени.
+        Данные поступают в callback и накопляются в очереди, пока не взведен flag.
         """
-        print("Прием и запись сигнала запущены (время не ограничено)...")
+        print("Прием и запись сигнала запущены (без разрывов)...")
         
-        fs = 44100  # Настройте под вашу частоту дискретизации (FS)
-        block_duration = 10  # Длина одного блока в секундах
-        block_samples = int(block_duration * fs)
-        
-        recorded_blocks = []  # Здесь будем копить готовые блоки данных
-        
-        # 1. Запускаем запись самого первого блока
-        current_record = sd.rec(
-            frames=block_samples, 
-            samplerate=fs, 
-            channels=1, 
-            dtype='float32', 
-            blocking=False
-        )
-        
-        block_start_time = time.time()
-        
-        # Основной цикл записи — работает бесконечно, пока не сработает flag
-        while not flag.is_set():
-            time.sleep(0.1)  # Проверяем кнопку каждые 100 мс
-            
-            elapsed_in_block = time.time() - block_start_time
-            
-            # Если текущий 10-секундный блок заполнился, а стоп не нажат
-            if elapsed_in_block >= block_duration:
-                # Сохраняем весь текущий блок целиком
-                recorded_blocks.append(current_record)
-                
-                # Сразу же запускаем запись следующего блока без остановки девайса
-                current_record = sd.rec(
-                    frames=block_samples, 
-                    samplerate=fs, 
-                    channels=1, 
-                    dtype='float32', 
-                    blocking=False
-                )
-                block_start_time = time.time()
-                print("Запись продолжается, выделен новый блок памяти...")
+        fs = 44100
+        q = queue.Queue()
 
-        # --- СЮДА МЫ ПОПАДАЕМ, КОГДА НАЖАТА КНОПКА "НАЗАД" (flag.is_set()) ---
-        sd.stop()  # На всякий случай останавливаем аудиокарту
+        # Callback вызывают фоновые драйверы аудиокарты без паузы
+        def audio_callback(indata, frames, time_info, status):
+            if status:
+                print(f"[*] Статус аудиопотока: {status}")
+            q.put(indata.copy())
+
+        recorded_chunks = []
+
+        # 1. Открываем непрерывный поток записи в формате int16
+        with sd.InputStream(samplerate=fs, channels=1, dtype='int16', callback=audio_callback):
+            # Поток пишет сам в фоновом режиме, пока мы ждем установки флага
+            while not flag.is_set():
+                time.sleep(0.05)
+                # Вынимаем накопленные кусочки из очереди в наш список
+                while not q.empty():
+                    recorded_chunks.append(q.get())
+
+            # Выбираем остатки из очереди после нажатия кнопки "Назад"
+            while not q.empty():
+                recorded_chunks.append(q.get())
+
         print("Прием остановлен пользователем. Обработка данных...")
-        
-        # Вычисляем, сколько секунд/сэмплов успело записаться в ПОСЛЕДНЕМ незавершенном блоке
-        final_elapsed = time.time() - block_start_time
-        actual_samples_in_final = int(final_elapsed * fs)
-        
-        # Отрезаем тишину у последнего куска
-        final_piece = current_record[:actual_samples_in_final]
-        
-        # Добавляем этот финальный кусочек к остальным сохраненным блокам
-        recorded_blocks.append(final_piece)
-        
-        # Склеиваем все 10-секундные блоки и финальный кусок в один монолитный массив numpy
-        full_audio = np.concatenate(recorded_blocks, axis=0)
-        full_audio = full_audio.flatten()
-        # Проверяем, что массив не пустой, и отправляем в модем
-        if len(full_audio) > 0:
-            wav_path = fr"src\data\Wave\accept\accepted.wav"
+
+        if recorded_chunks:
+            # Склеиваем все куски в один монолитный массив
+            full_audio = np.concatenate(recorded_chunks, axis=0).flatten()
+            
+            # Сохраняем WAV фал
+            wav_dir = r"src\data\Wave\accept"
+            os.makedirs(wav_dir, exist_ok=True)
+            wav_path = os.path.join(wav_dir, "accepted.wav")
+            
             wavfile.write(wav_path, fs, full_audio)
-            print(f"Полный сигнал успешно собран. Длина массива: {len(full_audio)} сэмплов.")
+            print(f"Полный сигнал собран: {len(full_audio)} сэмплов ({len(full_audio)/fs:.2f} сек).")
             
             # ДЕКОДИРОВАНИЕ
             md = Modem()
-            output_archive_path = fr"src\data\res\received_archive.7z"
+            output_archive_path = r"src\data\res\received_archive.7z"
             
+            # Передаем полный массив int16 напрямую в модем
             md.decode_large_file_from_samples(
                 samples=full_audio,
-                output_file_path=output_archive_path,
+                output_file_path=output_archive_path
             )
             print("Декодирование успешно завершено!")
         else:
-            print("Запись оказалась пустой.")     
+            print("Запись оказалась пустой.")
         
 
     
